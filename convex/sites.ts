@@ -172,3 +172,20 @@ export const getWithPlugins = query({
     };
   },
 });
+
+// Temporary admin check (no auth required) — REMOVE after verification
+export const adminCount = query({
+  args: {},
+  handler: async (ctx) => {
+    const sites = await ctx.db.query("sites").collect();
+    const accounts = await ctx.db.query("hostingAccounts").collect();
+    const plugins = await ctx.db.query("sitePlugins").collect();
+    return {
+      sites: sites.length,
+      accounts: accounts.length,
+      plugins: plugins.length,
+      accountLabels: accounts.map((a: any) => a.label),
+      sampleDomains: sites.slice(0, 5).map((s: any) => s.domain),
+    };
+  },
+});
