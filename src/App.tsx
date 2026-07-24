@@ -11,6 +11,7 @@ import {
   DashboardPage,
   SiteDetailPage,
   ActivityPage,
+  ConstraintsPage,
   LandingPage,
   LoginPage,
   SettingsPage,
@@ -39,6 +40,7 @@ function App() {
                 <Route path="/site/:siteId" element={<SiteDetailPage />} />
                 <Route path="/health" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/activity" element={<ActivityPage />} />
+                <Route path="/constraints" element={<ConstraintsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Route>
             </Route>

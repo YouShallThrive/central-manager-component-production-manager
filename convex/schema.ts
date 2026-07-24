@@ -105,6 +105,42 @@ const schema = defineSchema({
     .index("by_site", ["siteId"])
     .index("by_created", ["createdAt"]),
 
+  // Site constraints — what cannot be updated/removed and why
+  siteConstraints: defineTable({
+    domain: v.string(),
+    constraintType: v.union(
+      v.literal("php_lock"),
+      v.literal("plugin_no_remove"),
+      v.literal("plugin_version_lock"),
+    ),
+    // For php_lock: the locked PHP version. For plugin: the plugin slug
+    target: v.string(),
+    // Human-readable label (e.g. "ThemeREX Addons", "PHP 5.6")
+    targetLabel: v.string(),
+    // Current version if applicable
+    currentVersion: v.optional(v.string()),
+    // Why this constraint exists
+    reason: v.string(),
+    // Severity: critical = site breaks, warning = degraded, info = best practice
+    severity: v.union(
+      v.literal("critical"),
+      v.literal("warning"),
+      v.literal("info"),
+    ),
+    // Action guidance
+    action: v.string(),
+    // Which scan or person added this
+    source: v.string(),
+    // Related constraint group (e.g. "themerex", "slider_rev_v6", "php74")
+    group: v.optional(v.string()),
+    addedAt: v.number(),
+    updatedAt: v.optional(v.number()),
+  })
+    .index("by_domain", ["domain"])
+    .index("by_type", ["constraintType"])
+    .index("by_group", ["group"])
+    .index("by_severity", ["severity"]),
+
   // App settings
   settings: defineTable({
     key: v.string(),
