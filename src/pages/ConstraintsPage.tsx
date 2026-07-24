@@ -195,6 +195,8 @@ const SEVERITY_BADGE: Record<string, { label: string; className: string }> = {
 
 function StatsCards({
   stats,
+  activeSeverity,
+  onSeverityClick,
 }: {
   stats: {
     total: number;
@@ -204,37 +206,56 @@ function StatsCards({
     uniqueDomains: number;
     byGroup: { group: string; count: number }[];
   };
+  activeSeverity: string;
+  onSeverityClick: (severity: string) => void;
 }) {
   const cards = [
-    { value: stats.total, label: "Total Constraints", accent: "" },
-    { value: stats.uniqueDomains, label: "Affected Sites", accent: "" },
+    { value: stats.total, label: "Total Constraints", accent: "", filterKey: "all" },
+    { value: stats.uniqueDomains, label: "Affected Sites", accent: "", filterKey: "" },
     {
       value: stats.critical,
       label: "Critical",
       accent: "border-red-500/50 dark:border-red-500/30",
+      activeAccent: "border-red-500 bg-red-500/10 dark:border-red-500 dark:bg-red-500/15 ring-2 ring-red-500/20",
+      filterKey: "critical",
     },
     {
       value: stats.warning,
       label: "Warning",
       accent: "border-amber-500/50 dark:border-amber-500/30",
+      activeAccent: "border-amber-500 bg-amber-500/10 dark:border-amber-500 dark:bg-amber-500/15 ring-2 ring-amber-500/20",
+      filterKey: "warning",
     },
     {
       value: stats.info,
       label: "Info",
       accent: "border-blue-500/50 dark:border-blue-500/30",
+      activeAccent: "border-blue-500 bg-blue-500/10 dark:border-blue-500 dark:bg-blue-500/15 ring-2 ring-blue-500/20",
+      filterKey: "info",
     },
   ];
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-      {cards.map((c) => (
-        <div
-          key={c.label}
-          className={`rounded-lg border bg-card p-4 text-center ${c.accent}`}
-        >
-          <p className="text-3xl font-bold">{c.value}</p>
-          <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
-        </div>
-      ))}
+      {cards.map((c) => {
+        const isClickable = c.filterKey !== "";
+        const isActive = c.filterKey !== "" && activeSeverity === c.filterKey;
+        return (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => isClickable && onSeverityClick(c.filterKey)}
+            disabled={!isClickable}
+            className={`rounded-lg border bg-card p-4 text-center transition-all ${
+              isClickable
+                ? "cursor-pointer hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+                : "cursor-default"
+            } ${isActive ? (c.activeAccent ?? c.accent) : c.accent}`}
+          >
+            <p className="text-3xl font-bold">{c.value}</p>
+            <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -674,7 +695,15 @@ export function ConstraintsPage() {
       </div>
 
       {/* Stats */}
-      {stats && <StatsCards stats={stats} />}
+      {stats && (
+        <StatsCards
+          stats={stats}
+          activeSeverity={severityFilter}
+          onSeverityClick={(key) =>
+            setSeverityFilter((prev) => (prev === key ? "all" : key))
+          }
+        />
+      )}
 
       {/* Search & Filters */}
       <div className="flex items-center gap-3 flex-wrap">
