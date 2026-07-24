@@ -293,11 +293,11 @@ function GroupSection({
 
             {/* Action guidance */}
             {items[0]?.action && (
-              <p className="text-xs">
-                <span className="font-semibold text-muted-foreground">
+              <p className="text-sm">
+                <span className="font-bold text-foreground">
                   Action:
                 </span>{" "}
-                <span className="text-foreground/80">{items[0].action}</span>
+                <span className="font-medium text-foreground/80">{items[0].action}</span>
               </p>
             )}
 
