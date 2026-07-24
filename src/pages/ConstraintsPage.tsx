@@ -1,9 +1,22 @@
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -30,11 +43,8 @@ import {
 import {
   Search,
   ShieldAlert,
-  AlertTriangle,
-  Info,
-  Lock,
-  Plug,
-  GitBranch,
+  ChevronDown,
+  ChevronRight,
   ExternalLink,
   Trash2,
   Plus,
@@ -42,55 +52,146 @@ import {
 import { toast } from "sonner";
 import type { Id } from "../../convex/_generated/dataModel";
 
-/* ── Constants ─────────────────────────────────────────────── */
+/* ── Types ─────────────────────────────────────────────────── */
 
-const SEVERITY_CONFIG = {
-  critical: {
-    label: "Critical",
-    icon: ShieldAlert,
-    badgeClass: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-    dotClass: "bg-red-500",
-  },
-  warning: {
-    label: "Warning",
-    icon: AlertTriangle,
-    badgeClass:
-      "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    dotClass: "bg-amber-500",
-  },
-  info: {
-    label: "Info",
-    icon: Info,
-    badgeClass:
-      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    dotClass: "bg-blue-500",
-  },
-} as const;
+interface Constraint {
+  _id: Id<"siteConstraints">;
+  domain: string;
+  constraintType: "php_lock" | "plugin_no_remove" | "plugin_version_lock";
+  target: string;
+  targetLabel: string;
+  currentVersion?: string;
+  reason: string;
+  severity: "critical" | "warning" | "info";
+  action: string;
+  source: string;
+  group?: string;
+  addedAt: number;
+}
 
-const TYPE_CONFIG = {
-  php_lock: { label: "PHP Lock", icon: Lock, color: "text-purple-600" },
-  plugin_no_remove: {
-    label: "Plugin — No Remove",
-    icon: Plug,
-    color: "text-red-600",
-  },
-  plugin_version_lock: {
-    label: "Version Lock",
-    icon: GitBranch,
-    color: "text-blue-600",
-  },
-} as const;
+/* ── Group config ──────────────────────────────────────────── */
 
-const GROUP_LABELS: Record<string, string> = {
-  themerex: "ThemeREX Addons",
-  essential_grid: "Essential Grid",
-  phlox: "Phlox Core Elements",
-  slider_rev_v6: "Slider Revolution v6",
-  php56: "PHP 5.6",
-  php74: "PHP 7.4",
+interface GroupConfig {
+  label: string;
+  icon: string;
+  severity: "critical" | "warning" | "info";
+  description: string;
+  columns: { key: string; label: string; width?: string }[];
+  sortOrder: number;
+}
+
+const GROUP_CONFIG: Record<string, GroupConfig> = {
+  themerex: {
+    label: "ThemeREX Addons",
+    icon: "⚠️",
+    severity: "critical",
+    description:
+      "Security vulnerability — removing breaks theme (required companion plugin). No updates available from developer.",
+    columns: [
+      { key: "domain", label: "Site", width: "50%" },
+      { key: "currentVersion", label: "Version", width: "25%" },
+      { key: "source", label: "Source", width: "25%" },
+    ],
+    sortOrder: 1,
+  },
+  essential_grid: {
+    label: "Essential Grid",
+    icon: "⚠️",
+    severity: "warning",
+    description:
+      "Required by ThemeREX-based themes. Removing breaks site layout. Skip in security sweeps.",
+    columns: [
+      { key: "domain", label: "Site", width: "50%" },
+      { key: "currentVersion", label: "Version", width: "25%" },
+      { key: "source", label: "Source", width: "25%" },
+    ],
+    sortOrder: 2,
+  },
+  phlox: {
+    label: "Phlox Core Elements",
+    icon: "⚠️",
+    severity: "critical",
+    description:
+      "Security vulnerability — required theme plugin. Removal breaks site.",
+    columns: [
+      { key: "domain", label: "Site", width: "50%" },
+      { key: "reason", label: "Notes", width: "50%" },
+    ],
+    sortOrder: 3,
+  },
+  slider_rev_v6: {
+    label: "Slider Revolution",
+    icon: "🔒",
+    severity: "warning",
+    description:
+      "On v6.x branch — NEVER auto-update to v7. Slider Revolution v7 breaks v6 sliders (migration is NOT backward-compatible). Update within v6.x only.",
+    columns: [
+      { key: "domain", label: "Site", width: "50%" },
+      { key: "currentVersion", label: "Version", width: "25%" },
+    ],
+    sortOrder: 4,
+  },
+  php56: {
+    label: "PHP Version Locks — PHP 5.6",
+    icon: "🔴",
+    severity: "critical",
+    description:
+      "Higher PHP versions break the site completely. Do NOT upgrade.",
+    columns: [
+      { key: "domain", label: "Site", width: "40%" },
+      { key: "currentVersion", label: "PHP", width: "15%" },
+      { key: "reason", label: "Notes", width: "45%" },
+    ],
+    sortOrder: 5,
+  },
+  php74: {
+    label: "PHP Version Locks — PHP 7.4",
+    icon: "🟡",
+    severity: "warning",
+    description:
+      "PHP 7.4 reached end-of-life Nov 2022. Needs compatibility testing before upgrade — plugins/themes may break on PHP 8.x.",
+    columns: [
+      { key: "domain", label: "Site", width: "50%" },
+      { key: "currentVersion", label: "PHP", width: "15%" },
+      { key: "reason", label: "Notes", width: "35%" },
+    ],
+    sortOrder: 6,
+  },
 };
 
-/* ── Stats Cards ───────────────────────────────────────────── */
+const FALLBACK_GROUP_CONFIG: GroupConfig = {
+  label: "Other Constraints",
+  icon: "📋",
+  severity: "info",
+  description: "Miscellaneous site constraints.",
+  columns: [
+    { key: "domain", label: "Site", width: "35%" },
+    { key: "targetLabel", label: "Plugin/Target", width: "20%" },
+    { key: "currentVersion", label: "Version", width: "15%" },
+    { key: "reason", label: "Reason", width: "30%" },
+  ],
+  sortOrder: 99,
+};
+
+const SEVERITY_BADGE: Record<string, { label: string; className: string }> = {
+  critical: {
+    label: "HIGH RISK",
+    className:
+      "bg-red-500 text-white border-red-500 hover:bg-red-600 uppercase text-[10px] font-bold tracking-wider",
+  },
+  warning: {
+    label: "WARNING",
+    className:
+      "bg-amber-500 text-white border-amber-500 hover:bg-amber-600 uppercase text-[10px] font-bold tracking-wider",
+  },
+  info: {
+    label: "INFO",
+    className:
+      "bg-blue-500 text-white border-blue-500 hover:bg-blue-600 uppercase text-[10px] font-bold tracking-wider",
+  },
+};
+
+/* ── Stats Cards (same style as original report) ───────────── */
 
 function StatsCards({
   stats,
@@ -104,194 +205,183 @@ function StatsCards({
     byGroup: { group: string; count: number }[];
   };
 }) {
+  const cards = [
+    { value: stats.total, label: "Total Constraints", accent: "" },
+    { value: stats.uniqueDomains, label: "Affected Sites", accent: "" },
+    {
+      value: stats.critical,
+      label: "Critical",
+      accent: "border-red-500/50 dark:border-red-500/30",
+    },
+    {
+      value: stats.warning,
+      label: "Warning",
+      accent: "border-amber-500/50 dark:border-amber-500/30",
+    },
+    {
+      value: stats.info,
+      label: "Info",
+      accent: "border-blue-500/50 dark:border-blue-500/30",
+    },
+  ];
   return (
     <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-      <div className="rounded-lg border bg-card p-4">
-        <p className="text-xs text-muted-foreground font-medium">
-          Total Constraints
-        </p>
-        <p className="text-2xl font-bold mt-1">{stats.total}</p>
-      </div>
-      <div className="rounded-lg border bg-card p-4">
-        <p className="text-xs text-muted-foreground font-medium">
-          Affected Sites
-        </p>
-        <p className="text-2xl font-bold mt-1">{stats.uniqueDomains}</p>
-      </div>
-      <div className="rounded-lg border bg-card p-4 border-red-200 dark:border-red-900/50">
-        <p className="text-xs text-red-600 dark:text-red-400 font-medium">
-          Critical
-        </p>
-        <p className="text-2xl font-bold mt-1 text-red-600 dark:text-red-400">
-          {stats.critical}
-        </p>
-      </div>
-      <div className="rounded-lg border bg-card p-4 border-amber-200 dark:border-amber-900/50">
-        <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-          Warning
-        </p>
-        <p className="text-2xl font-bold mt-1 text-amber-600 dark:text-amber-400">
-          {stats.warning}
-        </p>
-      </div>
-      <div className="rounded-lg border bg-card p-4 border-blue-200 dark:border-blue-900/50">
-        <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-          Info
-        </p>
-        <p className="text-2xl font-bold mt-1 text-blue-600 dark:text-blue-400">
-          {stats.info}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ── Group Breakdown ───────────────────────────────────────── */
-
-function GroupBreakdown({
-  groups,
-  activeGroup,
-  onGroupClick,
-}: {
-  groups: { group: string; count: number }[];
-  activeGroup: string;
-  onGroupClick: (g: string) => void;
-}) {
-  if (groups.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        onClick={() => onGroupClick("all")}
-        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-          activeGroup === "all"
-            ? "bg-primary text-primary-foreground border-primary"
-            : "bg-card hover:bg-muted border-border"
-        }`}
-      >
-        All
-      </button>
-      {groups.map(({ group, count }) => (
-        <button
-          type="button"
-          key={group}
-          onClick={() => onGroupClick(group)}
-          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-            activeGroup === group
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-card hover:bg-muted border-border"
-          }`}
+      {cards.map((c) => (
+        <div
+          key={c.label}
+          className={`rounded-lg border bg-card p-4 text-center ${c.accent}`}
         >
-          {GROUP_LABELS[group] ?? group}{" "}
-          <span className="opacity-60">({count})</span>
-        </button>
+          <p className="text-3xl font-bold">{c.value}</p>
+          <p className="text-xs text-muted-foreground mt-1">{c.label}</p>
+        </div>
       ))}
     </div>
   );
 }
 
-/* ── Constraint Row ────────────────────────────────────────── */
+/* ── Collapsible Group Section ─────────────────────────────── */
 
-function ConstraintRow({
-  constraint,
+function GroupSection({
+  groupKey: _groupKey,
+  config,
+  items,
+  defaultOpen,
   onDelete,
 }: {
-  constraint: {
-    _id: Id<"siteConstraints">;
-    domain: string;
-    constraintType: "php_lock" | "plugin_no_remove" | "plugin_version_lock";
-    target: string;
-    targetLabel: string;
-    currentVersion?: string;
-    reason: string;
-    severity: "critical" | "warning" | "info";
-    action: string;
-    source: string;
-    group?: string;
-    addedAt: number;
-  };
+  groupKey: string;
+  config: GroupConfig;
+  items: Constraint[];
+  defaultOpen: boolean;
   onDelete: (id: Id<"siteConstraints">) => void;
 }) {
-  const sev = SEVERITY_CONFIG[constraint.severity];
-  const typ = TYPE_CONFIG[constraint.constraintType];
-  const SevIcon = sev.icon;
-  const TypeIcon = typ.icon;
+  const [open, setOpen] = useState(defaultOpen);
+  const sev = SEVERITY_BADGE[config.severity];
 
   return (
-    <div className="group flex items-start gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-      {/* Severity dot */}
-      <div className="mt-1.5">
-        <div className={`size-2.5 rounded-full ${sev.dotClass}`} />
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <a
-            href={`https://${constraint.domain}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-sm hover:underline inline-flex items-center gap-1"
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="rounded-xl border bg-card overflow-hidden">
+        {/* Header — always visible, acts as trigger */}
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-muted/40 transition-colors cursor-pointer"
           >
-            {constraint.domain}
-            <ExternalLink className="size-3 opacity-40" />
-          </a>
-          <Badge variant="outline" className={`text-[10px] py-0 ${sev.badgeClass}`}>
-            <SevIcon className="size-3 mr-0.5" />
-            {sev.label}
-          </Badge>
-          <Badge
-            variant="outline"
-            className="text-[10px] py-0 bg-muted/50"
-          >
-            <TypeIcon className={`size-3 mr-0.5 ${typ.color}`} />
-            {typ.label}
-          </Badge>
-          {constraint.group && (
-            <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-              {GROUP_LABELS[constraint.group] ?? constraint.group}
-            </span>
-          )}
-        </div>
+            {open ? (
+              <ChevronDown className="size-5 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+            )}
+            <span className="text-lg shrink-0">{config.icon}</span>
+            <h2 className="text-lg font-bold tracking-tight">{config.label}</h2>
+            <Badge className={`ml-1 ${sev.className}`}>
+              {items.length} SITE{items.length !== 1 ? "S" : ""}
+            </Badge>
+            <Badge variant="outline" className={`ml-1 ${sev.className}`}>
+              {sev.label}
+            </Badge>
+            <span className="flex-1" />
+          </button>
+        </CollapsibleTrigger>
 
-        <div className="mt-1 flex items-center gap-2 text-sm">
-          <span className="font-medium text-muted-foreground">
-            {constraint.targetLabel}
-          </span>
-          {constraint.currentVersion && (
-            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded font-mono">
-              v{constraint.currentVersion}
-            </span>
-          )}
-        </div>
+        {/* Collapsible body — description + table */}
+        <CollapsibleContent>
+          <div className="px-5 pb-5 space-y-3">
+            {/* Description */}
+            <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
+              {config.description}
+            </p>
 
-        <p className="text-xs text-muted-foreground mt-1">
-          {constraint.reason}
-        </p>
+            {/* Action guidance */}
+            {items[0]?.action && (
+              <p className="text-xs">
+                <span className="font-semibold text-muted-foreground">
+                  Action:
+                </span>{" "}
+                <span className="text-foreground/80">{items[0].action}</span>
+              </p>
+            )}
 
-        <p className="text-xs mt-1">
-          <span className="font-medium text-muted-foreground">Action:</span>{" "}
-          <span className="text-foreground/80">{constraint.action}</span>
-        </p>
+            {/* Table */}
+            <div className="rounded-lg border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30">
+                    {config.columns.map((col) => (
+                      <TableHead
+                        key={col.key}
+                        style={{ width: col.width }}
+                        className="text-xs font-semibold"
+                      >
+                        {col.label}
+                      </TableHead>
+                    ))}
+                    <TableHead className="w-10" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => (
+                    <TableRow key={item._id} className="group">
+                      {config.columns.map((col) => (
+                        <TableCell key={col.key} className="text-sm">
+                          {col.key === "domain" ? (
+                            <a
+                              href={`https://${item.domain}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium hover:underline inline-flex items-center gap-1 text-foreground"
+                            >
+                              {item.domain}
+                              <ExternalLink className="size-3 opacity-30" />
+                            </a>
+                          ) : col.key === "currentVersion" ? (
+                            <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
+                              v{item.currentVersion ?? "—"}
+                            </span>
+                          ) : col.key === "source" ? (
+                            <span className="text-xs text-muted-foreground">
+                              {item.source.includes("Anna")
+                                ? "✓ Known"
+                                : "🆕 Scan"}
+                            </span>
+                          ) : col.key === "reason" ? (
+                            <span className="text-xs text-muted-foreground">
+                              {item.reason}
+                            </span>
+                          ) : col.key === "targetLabel" ? (
+                            <span className="text-xs">{item.targetLabel}</span>
+                          ) : (
+                            <span className="text-xs">
+                              {(item as unknown as Record<string, unknown>)[col.key] as string ?? "—"}
+                            </span>
+                          )}
+                        </TableCell>
+                      ))}
+                      <TableCell>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                                onClick={() => onDelete(item._id)}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Remove constraint</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </CollapsibleContent>
       </div>
-
-      {/* Delete button */}
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-              onClick={() => onDelete(constraint._id)}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Remove constraint</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
+    </Collapsible>
   );
 }
 
@@ -381,7 +471,9 @@ function AddConstraintDialog() {
               </label>
               <Select
                 value={constraintType}
-                onValueChange={(v) => setConstraintType(v as typeof constraintType)}
+                onValueChange={(v) =>
+                  setConstraintType(v as typeof constraintType)
+                }
               >
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -402,7 +494,7 @@ function AddConstraintDialog() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-muted-foreground">
-                Target (slug/identifier) *
+                Target (slug) *
               </label>
               <Input
                 value={target}
@@ -510,17 +602,21 @@ export function ConstraintsPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
-  const [groupFilter, setGroupFilter] = useState("all");
 
   const stats = useQuery(api.constraints.stats);
   const constraints = useQuery(api.constraints.list, {
     search: search || undefined,
-    typeFilter: typeFilter !== "all" ? (typeFilter as "php_lock" | "plugin_no_remove" | "plugin_version_lock") : undefined,
+    typeFilter:
+      typeFilter !== "all"
+        ? (typeFilter as
+            | "php_lock"
+            | "plugin_no_remove"
+            | "plugin_version_lock")
+        : undefined,
     severityFilter:
       severityFilter !== "all"
         ? (severityFilter as "critical" | "warning" | "info")
         : undefined,
-    groupFilter: groupFilter !== "all" ? groupFilter : undefined,
   });
 
   const removeConstraint = useMutation(api.constraints.remove);
@@ -534,13 +630,40 @@ export function ConstraintsPage() {
     }
   };
 
+  /* Group constraints by their group field */
+  const groupedConstraints = useMemo(() => {
+    if (!constraints) return [];
+
+    const map = new Map<string, Constraint[]>();
+    for (const c of constraints) {
+      const key = c.group ?? "_other";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c as Constraint);
+    }
+
+    // Sort groups by the config sort order
+    return [...map.entries()]
+      .map(([key, items]) => ({
+        key,
+        config: GROUP_CONFIG[key] ?? {
+          ...FALLBACK_GROUP_CONFIG,
+          label:
+            key === "_other"
+              ? "Other Constraints"
+              : key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        },
+        items: items.sort((a, b) => a.domain.localeCompare(b.domain)),
+      }))
+      .sort((a, b) => a.config.sortOrder - b.config.sortOrder);
+  }, [constraints]);
+
   return (
     <div className="max-w-[1200px] mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            Site Constraints Registry
+            🔍 Site Constraints Registry
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Sites with update or removal restrictions — referenced during
@@ -553,16 +676,7 @@ export function ConstraintsPage() {
       {/* Stats */}
       {stats && <StatsCards stats={stats} />}
 
-      {/* Group pills */}
-      {stats && stats.byGroup.length > 0 && (
-        <GroupBreakdown
-          groups={stats.byGroup}
-          activeGroup={groupFilter}
-          onGroupClick={setGroupFilter}
-        />
-      )}
-
-      {/* Filters */}
+      {/* Search & Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -580,7 +694,9 @@ export function ConstraintsPage() {
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
             <SelectItem value="php_lock">PHP Lock</SelectItem>
-            <SelectItem value="plugin_no_remove">Plugin — No Remove</SelectItem>
+            <SelectItem value="plugin_no_remove">
+              Plugin — No Remove
+            </SelectItem>
             <SelectItem value="plugin_version_lock">Version Lock</SelectItem>
           </SelectContent>
         </Select>
@@ -597,17 +713,17 @@ export function ConstraintsPage() {
         </Select>
       </div>
 
-      {/* Constraints list */}
+      {/* Grouped collapsible sections */}
       {constraints === undefined ? (
-        <div className="space-y-3">
-          {[1, 2, 3, 4].map((i) => (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-24 rounded-lg border bg-muted/30 animate-pulse"
+              className="h-32 rounded-xl border bg-muted/30 animate-pulse"
             />
           ))}
         </div>
-      ) : constraints.length === 0 ? (
+      ) : groupedConstraints.length === 0 ? (
         <div className="rounded-xl border p-12 text-center">
           <ShieldAlert className="size-12 text-muted-foreground/30 mx-auto mb-4" />
           <h2 className="text-lg font-semibold mb-2">No Constraints Found</h2>
@@ -618,14 +734,14 @@ export function ConstraintsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">
-            {constraints.length} constraint{constraints.length !== 1 ? "s" : ""}
-          </p>
-          {constraints.map((c) => (
-            <ConstraintRow
-              key={c._id}
-              constraint={c}
+        <div className="space-y-4">
+          {groupedConstraints.map(({ key, config, items }, idx) => (
+            <GroupSection
+              key={key}
+              groupKey={key}
+              config={config}
+              items={items}
+              defaultOpen={idx < 3}
               onDelete={handleDelete}
             />
           ))}
