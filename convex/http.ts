@@ -227,6 +227,51 @@ http.route({
   }),
 });
 
+// ── Temporary seed endpoint for constraints ─────────────────
+http.route({
+  path: "/api/admin/seed-constraints",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const authHeader = request.headers.get("Authorization");
+    const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+    if (!authHeader || authHeader !== `Bearer ${secret}`) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 403,
+        headers: corsHeaders(),
+      });
+    }
+    try {
+      const body = await request.json();
+      const items = body.items;
+      if (!Array.isArray(items)) {
+        return new Response(JSON.stringify({ error: "items must be array" }), {
+          status: 400,
+          headers: corsHeaders(),
+        });
+      }
+      const count = await ctx.runMutation(internal.seedConstraints.seedBatch, { items });
+      return new Response(JSON.stringify({ seeded: count }), {
+        status: 200,
+        headers: corsHeaders(),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(JSON.stringify({ error: msg }), {
+        status: 500,
+        headers: corsHeaders(),
+      });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/seed-constraints",
+  method: "OPTIONS",
+  handler: httpAction(async () => {
+    return new Response(null, { status: 204, headers: corsHeaders() });
+  }),
+});
+
 function corsHeaders() {
   return {
     "Content-Type": "application/json",
