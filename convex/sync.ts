@@ -29,6 +29,11 @@ export const triggerFullSync = action({
       totalPlugins: number;
       errors: string[];
     } = await ctx.runAction(internal.credentialSync.fullSync, {});
+
+    // PHP version is not in Rocket's site list — it needs one settings call per
+    // site, so the sweep runs as a background job after the main sync returns.
+    await ctx.scheduler.runAfter(0, internal.phpVersions.syncBatch, { offset: 0 });
+
     return result;
   },
 });

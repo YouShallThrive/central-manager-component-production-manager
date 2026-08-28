@@ -80,28 +80,6 @@ export function DashboardPage() {
   const triggerSync = useAction(api.sync.triggerFullSync);
   const [syncing, setSyncing] = useState(false);
   const phpSummary = useQuery(api.phpVersions.summary);
-  const syncPhpVersions = useAction(api.phpVersions.syncAll);
-  const [phpSyncing, setPhpSyncing] = useState(false);
-
-  const handlePhpSync = useCallback(async () => {
-    setPhpSyncing(true);
-    try {
-      const res = await syncPhpVersions({});
-      toast.info(`Checking PHP versions on ${res.sites} sites — running in the background.`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "PHP version sync failed");
-    } finally {
-      setPhpSyncing(false);
-    }
-  }, [syncPhpVersions]);
-
-  const phpHeaderAction = (
-    <Button onClick={handlePhpSync} disabled={phpSyncing} variant="outline" className="gap-2">
-      {phpSyncing ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
-      Sync PHP
-    </Button>
-  );
-
   const phpPanel = phpSummary && phpSummary.total > 0 ? (
     <div className="rounded-lg border bg-card p-4 space-y-3">
       <div className="flex items-center justify-between">
@@ -120,7 +98,7 @@ export function DashboardPage() {
           {phpSummary.unresolved > 0 && `${phpSummary.unresolved} unreachable on Rocket.net · `}
           {phpSummary.lastCheckedAt
             ? `checked ${new Date(phpSummary.lastCheckedAt).toLocaleString()}`
-            : "never checked — click Sync PHP"}
+            : "never checked — runs with the next Sync"}
         </span>
       </div>
       {phpSummary.byVersion.length > 0 && (
@@ -223,7 +201,6 @@ export function DashboardPage() {
       accountFilter={accountFilter}
       onAccountFilterChange={setAccountFilter}
       onSync={handleSync}
-      headerActions={phpHeaderAction}
       summaryPanel={phpPanel}
       isSyncing={syncing}
       onSiteClick={(site) => navigate(`/site/${site._id}`)}
