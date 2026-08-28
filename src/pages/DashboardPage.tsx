@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import SiteManagerTemplate from "@/components/SiteManagerTemplate";
-import { PhpVersionBadge } from "@/components/PhpVersionBadge";
+import { PhpVersionBadge, matchesPhpFilter, PHP_FILTER_OPTIONS, PHP_FILTER_ALL_LABEL } from "@/components/PhpVersionBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Cpu, AlertTriangle, Loader2 } from "lucide-react";
@@ -62,6 +62,7 @@ const extraColumns: ColumnDef<SiteDoc>[] = [
 export function DashboardPage() {
   const [search, setSearch] = useState("");
   const [accountFilter, setAccountFilter] = useState<string>("all");
+  const [phpFilter, setPhpFilter] = useState<string>("all");
   const [statuscakeFilter, setStatuscakeFilter] = useState<string>("all");
   const [pluginHealthFilter, setPluginHealthFilter] = useState<string>("all");
 
@@ -166,6 +167,13 @@ export function DashboardPage() {
       }
     : null;
 
+  const visibleSites = useMemo(() => {
+    const list = sites as SiteDoc[] | undefined;
+    if (!list) return undefined;
+    if (phpFilter === "all") return list;
+    return list.filter((s) => matchesPhpFilter(s.phpVersion, phpFilter));
+  }, [sites, phpFilter]);
+
   const extraFilters: ExtraFilter[] = useMemo(() => [
     {
       key: "statuscake",
@@ -189,7 +197,15 @@ export function DashboardPage() {
       onChange: setPluginHealthFilter,
       width: "w-[160px]",
     },
-  ], [statuscakeFilter, pluginHealthFilter]);
+      {
+      key: "php",
+      allLabel: PHP_FILTER_ALL_LABEL,
+      options: PHP_FILTER_OPTIONS,
+      value: phpFilter,
+      onChange: setPhpFilter,
+      width: "w-[170px]",
+    },
+], [statuscakeFilter, pluginHealthFilter, phpFilter]);
 
   return (
     <SiteManagerTemplate<SiteDoc>
@@ -199,7 +215,7 @@ export function DashboardPage() {
       fieldAccessors={fieldAccessors}
       extraColumns={extraColumns}
       extraFilters={extraFilters}
-      sites={sites as SiteDoc[] | undefined}
+      sites={visibleSites}
       accounts={accounts}
       search={search}
       onSearchChange={setSearch}
