@@ -29,6 +29,11 @@ async function fetchPhpVersionWithFallback(
   tokens: string[],
   rocketSiteId: number,
 ): Promise<{ version?: string; lastStatus?: number; rocketStatus: RocketStatus }> {
+  // A record with no usable Rocket.net id (restored history) is missing by
+  // definition — don't waste a request on it.
+  if (!rocketSiteId || rocketSiteId <= 0) {
+    return { version: undefined, lastStatus: 404, rocketStatus: "missing" };
+  }
   let lastStatus: number | undefined;
   const statuses: number[] = [];
   for (const token of tokens) {
