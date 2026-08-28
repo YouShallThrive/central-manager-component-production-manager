@@ -216,7 +216,7 @@ export function SiteDetailPage() {
         {filteredPlugins.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             {(site.plugins?.length ?? 0) === 0
-              ? 'No plugins loaded yet. Click "Sync Plugins" above to fetch them from Rocket.net.'
+              ? 'No plugins loaded yet. Click "Sync" above to fetch them from Rocket.net.'
               : "No plugins match your filters"}
           </div>
         ) : (
