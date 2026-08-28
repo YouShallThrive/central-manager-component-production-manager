@@ -6,8 +6,7 @@ import { toast } from "sonner";
 import SiteManagerTemplate from "@/components/SiteManagerTemplate";
 import { PhpVersionBadge, matchesPhpFilter, PHP_FILTER_OPTIONS, PHP_FILTER_ALL_LABEL } from "@/components/PhpVersionBadge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Cpu, AlertTriangle, Loader2 } from "lucide-react";
+import { Cpu, AlertTriangle } from "lucide-react";
 import type { ColumnDef, SiteFieldAccessors, SiteManagerStats, ExtraFilter } from "@/components/SiteManagerTemplate";
 
 type SiteDoc = {
