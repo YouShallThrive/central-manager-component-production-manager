@@ -37,7 +37,7 @@ export const lockCrossCheck = internalQuery({
     const rows = locks.map((lock) => {
       const key = lock.domain.replace(/^www\./, "").toLowerCase();
       const site = byDomain.get(key);
-      const locked = normalize(lock.target);
+      const locked = normalize(lock.currentVersion ?? lock.targetLabel ?? lock.target);
       const actual = normalize(site?.phpVersion);
       let status: "match" | "mismatch" | "no_site" | "unknown_php";
       if (!site) status = "no_site";
@@ -46,7 +46,7 @@ export const lockCrossCheck = internalQuery({
       else status = "mismatch";
       return {
         domain: lock.domain,
-        locked: lock.target,
+        locked: lock.currentVersion ?? lock.targetLabel ?? lock.target,
         actual: site?.phpVersion ?? null,
         severity: lock.severity,
         reason: lock.reason,
