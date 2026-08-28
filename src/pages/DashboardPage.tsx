@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import SiteManagerTemplate from "@/components/SiteManagerTemplate";
 import { PhpVersionBadge, matchesPhpFilter, PHP_FILTER_OPTIONS, PHP_FILTER_ALL_LABEL } from "@/components/PhpVersionBadge";
+import { RocketStatusBadge, matchesRocketFilter, ROCKET_FILTER_OPTIONS, ROCKET_FILTER_ALL_LABEL } from "@/components/RocketStatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Cpu, AlertTriangle } from "lucide-react";
 import type { ColumnDef, SiteFieldAccessors, SiteManagerStats, ExtraFilter } from "@/components/SiteManagerTemplate";
@@ -44,6 +45,8 @@ const fieldAccessors: SiteFieldAccessors<SiteDoc> = {
   getWpDebugCheckedAt: (site) => site.wpDebugCheckedAt ?? null,
   getPhpVersion: (site) => site.phpVersion,
   getPhpCheckedAt: (site) => site.phpCheckedAt,
+  getRocketStatus: (site) => site.rocketStatus,
+  getRocketMissingSince: (site) => site.rocketMissingSince,
 };
 
 /* ── Extra column: Account (production-specific) ── */
@@ -62,6 +65,7 @@ export function DashboardPage() {
   const [search, setSearch] = useState("");
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [phpFilter, setPhpFilter] = useState<string>("all");
+  const [rocketFilter, setRocketFilter] = useState<string>("all");
   const [statuscakeFilter, setStatuscakeFilter] = useState<string>("all");
   const [pluginHealthFilter, setPluginHealthFilter] = useState<string>("all");
 
@@ -148,9 +152,12 @@ export function DashboardPage() {
   const visibleSites = useMemo(() => {
     const list = sites as SiteDoc[] | undefined;
     if (!list) return undefined;
-    if (phpFilter === "all") return list;
-    return list.filter((s) => matchesPhpFilter(s.phpVersion, phpFilter));
-  }, [sites, phpFilter]);
+    let out = list;
+    if (phpFilter !== "all") out = out.filter((s) => matchesPhpFilter(s.phpVersion, phpFilter));
+    if (rocketFilter !== "all")
+      out = out.filter((s) => matchesRocketFilter(s.rocketStatus, rocketFilter));
+    return out;
+  }, [sites, phpFilter, rocketFilter]);
 
   const extraFilters: ExtraFilter[] = useMemo(() => [
     {
@@ -183,7 +190,15 @@ export function DashboardPage() {
       onChange: setPhpFilter,
       width: "w-[170px]",
     },
-], [statuscakeFilter, pluginHealthFilter, phpFilter]);
+    {
+      key: "rocket",
+      allLabel: ROCKET_FILTER_ALL_LABEL,
+      options: ROCKET_FILTER_OPTIONS,
+      value: rocketFilter,
+      onChange: setRocketFilter,
+      width: "w-[210px]",
+    },
+], [statuscakeFilter, pluginHealthFilter, phpFilter, rocketFilter]);
 
   return (
     <SiteManagerTemplate<SiteDoc>

@@ -1,4 +1,4 @@
-import { query } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
 export const list = query({
@@ -173,3 +173,25 @@ export const getWithPlugins = query({
   },
 });
 
+
+/**
+ * Human-initiated removal of a site record. Sync never deletes records — a
+ * site missing from Rocket.net is flagged and stays visible until someone
+ * explicitly removes it here.
+ */
+export const removeSite = mutation({
+  args: { siteId: v.id("sites") },
+  returns: v.null(),
+  handler: async (ctx, { siteId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+
+    const plugins = await ctx.db
+      .query("sitePlugins")
+      .withIndex("by_site", (q) => q.eq("siteId", siteId))
+      .collect();
+    for (const p of plugins) await ctx.db.delete(p._id);
+    await ctx.db.delete(siteId);
+    return null;
+  },
+});

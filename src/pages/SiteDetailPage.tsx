@@ -1,6 +1,8 @@
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { PhpVersionBadge } from "@/components/PhpVersionBadge";
+import { RocketStatusBadge } from "@/components/RocketStatusBadge";
+import { MissingFromRocketNotice } from "@/components/MissingFromRocketNotice";
 import { useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -131,6 +133,14 @@ export function SiteDetailPage() {
         url: `https://${site.domain}`,
         label: site.domain,
       }}
+      notice={
+        <MissingFromRocketNotice
+          siteId={site._id}
+          status={site.rocketStatus}
+          missingSince={site.rocketMissingSince}
+          domain={site.domain}
+        />
+      }
       titleBadge={
         <Badge variant="outline" className={`${env.borderColor} ${env.color}`}>
           {site.environment}
@@ -143,6 +153,7 @@ export function SiteDetailPage() {
             <span className="text-sm text-muted-foreground">WP {site.wpVersion}</span>
           )}
           <PhpVersionBadge version={site.phpVersion} checkedAt={site.phpCheckedAt} />
+          <RocketStatusBadge status={site.rocketStatus} missingSince={site.rocketMissingSince} />
           {site.lastSyncedAt && (
             <span className="text-sm text-muted-foreground">
               Synced {new Date(site.lastSyncedAt).toLocaleDateString()}
@@ -150,7 +161,7 @@ export function SiteDetailPage() {
           )}
         </>
       }
-      syncLabel="Sync Plugins"
+      syncLabel="Sync"
       syncingLabel="Syncing…"
       onSync={handleSync}
       isSyncing={syncing}

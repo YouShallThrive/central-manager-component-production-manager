@@ -228,7 +228,7 @@ http.route({
 });
 
 // ── PHP maintenance endpoints ───────────────────────────────
-// POST /api/admin/orphan-audit  { adminKey, purge?: boolean }
+// POST /api/admin/orphan-audit  { adminKey }  — flags missing sites, never deletes
 // POST /api/admin/php-lock-check { adminKey }
 
 http.route({
@@ -244,9 +244,7 @@ http.route({
           headers: corsHeaders(),
         });
       }
-      const result = await ctx.runAction(internal.orphanSites.audit, {
-        purge: body.purge === true,
-      });
+      const result = await ctx.runAction(internal.orphanSites.audit, {});
       return new Response(JSON.stringify({ status: "ok", ...result }), {
         status: 200,
         headers: corsHeaders(),
@@ -272,6 +270,34 @@ http.route({
         });
       }
       const result = await ctx.runQuery(internal.phpAudit.lockCrossCheck, {});
+      return new Response(JSON.stringify({ status: "ok", ...result }), {
+        status: 200,
+        headers: corsHeaders(),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(JSON.stringify({ error: msg }), { status: 500, headers: corsHeaders() });
+    }
+  }),
+});
+
+// POST /api/admin/restore-sites { adminKey, sites: [{ domain, siteId, environment? }] }
+http.route({
+  path: "/api/admin/restore-sites",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      if (!body.adminKey || body.adminKey !== secret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 403,
+          headers: corsHeaders(),
+        });
+      }
+      const result = await ctx.runMutation(internal.orphanSites.restoreSites, {
+        sites: body.sites ?? [],
+      });
       return new Response(JSON.stringify({ status: "ok", ...result }), {
         status: 200,
         headers: corsHeaders(),

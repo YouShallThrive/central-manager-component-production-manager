@@ -6,10 +6,10 @@
  * Rocket.net ID stops existing, so those rows 404 forever and inflate the
  * "unreachable on Rocket.net" count in the PHP sweep.
  *
- * `audit` probes every site with every Rocket token and classifies the result.
- * `purge` deletes only the rows where EVERY token returns 404 (site genuinely
- * gone), along with their dependent sitePlugins rows. Rows that return 401/403
- * are never deleted — those are token problems, not dead sites.
+ * `audit` probes every site with every Rocket token and classifies the result,
+ * then FLAGS the row (`rocketStatus`) so the dashboard can show it. Records are
+ * never deleted automatically — Michael's rule: only a person removes a site
+ * record. 401/403 is a token problem and is flagged separately from a 404.
  */
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
@@ -71,7 +71,31 @@ export const getAudit = internalQuery({
   },
 });
 
-/** Deletes one site row plus its dependent sitePlugins / actionLogs links. */
+/** Flags a row's Rocket.net presence. Never deletes anything. */
+export const flagStatus = internalMutation({
+  args: { siteId: v.id("sites"), status: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { siteId, status }) => {
+    const site = await ctx.db.get(siteId);
+    if (!site) return null;
+    if (status === "missing") {
+      await ctx.db.patch(siteId, {
+        rocketStatus: "missing",
+        rocketMissingSince: site.rocketMissingSince ?? Date.now(),
+      });
+    } else if (status === "auth_error") {
+      await ctx.db.patch(siteId, { rocketStatus: "auth_error" });
+    } else {
+      await ctx.db.patch(siteId, { rocketStatus: "ok", rocketMissingSince: undefined });
+    }
+    return null;
+  },
+});
+
+/**
+ * Deletes one site row plus its dependent sitePlugins / actionLogs links.
+ * Only ever called from an explicit human action — never from a sweep.
+ */
 export const deleteSite = internalMutation({
   args: { siteId: v.id("sites") },
   returns: v.null(),
@@ -94,22 +118,21 @@ export const deleteSite = internalMutation({
 });
 
 /**
- * Probes every site record. When `purge` is true, rows that 404 on every
- * token are deleted. Returns the classification tallies plus the affected
- * domains so the result can be reviewed before deleting anything.
+ * Probes every site record and flags each one's Rocket.net presence. Returns
+ * the classification tallies plus the affected domains. Nothing is ever
+ * deleted here — flagged rows stay visible in the dashboard for a human.
  */
 export const audit = internalAction({
-  args: { purge: v.boolean() },
+  args: {},
   handler: async (
     ctx,
-    { purge },
   ): Promise<{
     total: number;
     ok: number;
     missing: number;
     auth: number;
     error: number;
-    deleted: number;
+    flagged: number;
     missingSites: Array<{ domain: string; siteId: number }>;
     authSites: Array<{ domain: string; siteId: number }>;
   }> => {
@@ -123,7 +146,7 @@ export const audit = internalAction({
     const tally = { ok: 0, missing: 0, auth: 0, error: 0 };
     const missingSites: Array<{ domain: string; siteId: number }> = [];
     const authSites: Array<{ domain: string; siteId: number }> = [];
-    const toDelete: Array<{ _id: any; domain: string; siteId: number }> = [];
+    const toFlag: Array<{ _id: any; domain: string; siteId: number; status: Verdict }> = [];
 
     for (let i = 0; i < rows.length; i += CONCURRENCY) {
       const slice = rows.slice(i, i + CONCURRENCY);
@@ -135,33 +158,97 @@ export const audit = internalAction({
         tally[verdict] += 1;
         if (verdict === "missing") {
           missingSites.push({ domain: r.domain, siteId: r.siteId });
-          toDelete.push({ _id: r._id, domain: r.domain, siteId: r.siteId });
+          toFlag.push({ _id: r._id, domain: r.domain, siteId: r.siteId, status: "missing" });
+        } else if (verdict === "ok") {
+          toFlag.push({ _id: r._id, domain: r.domain, siteId: r.siteId, status: "ok" });
         } else if (verdict === "auth") {
           authSites.push({ domain: r.domain, siteId: r.siteId });
         }
       });
     }
 
-    let deleted = 0;
-    if (purge) {
-      for (const row of toDelete) {
-        await ctx.runMutation(internal.orphanSites.deleteSite, { siteId: row._id });
-        deleted += 1;
+    // Flag, never delete. A site that has vanished from Rocket.net stays in the
+    // dashboard marked "Missing from Rocket.net" until a person removes it.
+    let flagged = 0;
+    for (const row of toFlag) {
+      await ctx.runMutation(internal.orphanSites.flagStatus, {
+        siteId: row._id,
+        status: row.status === "missing" ? "missing" : "ok",
+      });
+      if (row.status === "missing") flagged += 1;
+    }
+    for (const row of authSites) {
+      const match = rows.find((r: any) => r.siteId === row.siteId);
+      if (match) {
+        await ctx.runMutation(internal.orphanSites.flagStatus, {
+          siteId: match._id,
+          status: "auth_error",
+        });
       }
     }
 
     await ctx.runMutation(internal.orphanSites.recordAudit, {
       value: JSON.stringify({
         ranAt: Date.now(),
-        purge,
         total: rows.length,
         ...tally,
-        deleted,
+        flagged,
         missingSites,
         authSites,
       }),
     });
 
-    return { total: rows.length, ...tally, deleted, missingSites, authSites };
+    return { total: rows.length, ...tally, flagged, missingSites, authSites };
+  },
+});
+
+/**
+ * Re-creates site records that were removed, flagged as missing from
+ * Rocket.net. Used once to restore records deleted before the flag-only rule
+ * existed; kept because a record should always be recoverable.
+ */
+export const restoreSites = internalMutation({
+  args: {
+    sites: v.array(
+      v.object({
+        domain: v.string(),
+        siteId: v.number(),
+        environment: v.optional(v.string()),
+      }),
+    ),
+  },
+  returns: v.object({
+    restored: v.array(v.string()),
+    skipped: v.array(v.string()),
+  }),
+  handler: async (ctx, { sites }) => {
+    const account = await ctx.db.query("hostingAccounts").first();
+    if (!account) throw new Error("No hosting account to attach restored sites to");
+
+    const existing = await ctx.db.query("sites").collect();
+    const byDomain = new Set(existing.map((s) => s.domain.toLowerCase()));
+
+    const restored: string[] = [];
+    const skipped: string[] = [];
+    for (const site of sites) {
+      if (byDomain.has(site.domain.toLowerCase())) {
+        skipped.push(site.domain);
+        continue;
+      }
+      const environment =
+        site.environment === "staging" || site.domain.startsWith("staging.")
+          ? ("staging" as const)
+          : ("production" as const);
+      await ctx.db.insert("sites", {
+        accountId: account._id,
+        siteId: site.siteId,
+        domain: site.domain,
+        environment,
+        rocketStatus: "missing",
+        rocketMissingSince: Date.now(),
+      });
+      restored.push(site.domain);
+    }
+    return { restored, skipped };
   },
 });

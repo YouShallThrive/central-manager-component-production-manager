@@ -31,6 +31,11 @@ const schema = defineSchema({
     wpVersion: v.optional(v.string()),
     phpVersion: v.optional(v.string()),
     phpCheckedAt: v.optional(v.number()),
+    // Rocket.net presence — set by the PHP/settings probe. Records are NEVER
+    // auto-deleted; a site missing from Rocket.net is flagged here and shown
+    // in the UI so a human decides whether to remove it.
+    rocketStatus: v.optional(v.string()), // "ok" | "missing" | "auth_error"
+    rocketMissingSince: v.optional(v.number()),
     // Plugin tracking
     pluginCount: v.optional(v.number()),
     outdatedCount: v.optional(v.number()),

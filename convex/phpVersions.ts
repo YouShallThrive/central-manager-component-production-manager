@@ -22,25 +22,33 @@ class AuthOrMissingError extends Error {
   }
 }
 
+export type RocketStatus = "ok" | "missing" | "auth_error";
+
 /** Tries each candidate token until one resolves the site. */
 async function fetchPhpVersionWithFallback(
   tokens: string[],
   rocketSiteId: number,
-): Promise<{ version?: string; lastStatus?: number }> {
+): Promise<{ version?: string; lastStatus?: number; rocketStatus: RocketStatus }> {
   let lastStatus: number | undefined;
+  const statuses: number[] = [];
   for (const token of tokens) {
     try {
       const version = await fetchPhpVersion(token, rocketSiteId);
-      return { version };
+      return { version, rocketStatus: "ok" };
     } catch (e) {
       if (e instanceof AuthOrMissingError) {
         lastStatus = e.status;
+        statuses.push(e.status);
         continue;
       }
       throw e;
     }
   }
-  return { version: undefined, lastStatus };
+  // Only a 404 from every token means the site is genuinely gone from
+  // Rocket.net. A 401/403 anywhere is a token problem, never a missing site.
+  const rocketStatus: RocketStatus =
+    statuses.length > 0 && statuses.every((s) => s === 404) ? "missing" : "auth_error";
+  return { version: undefined, lastStatus, rocketStatus };
 }
 
 async function fetchPhpVersion(token: string, rocketSiteId: number): Promise<string | undefined> {
@@ -102,13 +110,27 @@ export const setPhpVersion = internalMutation({
   args: {
     siteId: v.id("sites"),
     phpVersion: v.optional(v.string()),
+    rocketStatus: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.siteId, {
-      phpVersion: args.phpVersion,
-      phpCheckedAt: Date.now(),
-    });
+    const site = await ctx.db.get(args.siteId);
+    const patch: Record<string, unknown> = { phpCheckedAt: Date.now() };
+
+    if (args.rocketStatus === "missing" || args.rocketStatus === "auth_error") {
+      // Site could not be read — keep the last known PHP version rather than
+      // blanking it, and record when it first went missing.
+      patch.rocketStatus = args.rocketStatus;
+      if (args.rocketStatus === "missing") {
+        patch.rocketMissingSince = site?.rocketMissingSince ?? Date.now();
+      }
+    } else {
+      patch.phpVersion = args.phpVersion;
+      patch.rocketStatus = "ok";
+      patch.rocketMissingSince = undefined;
+    }
+
+    await ctx.db.patch(args.siteId, patch);
     return null;
   },
 });
@@ -199,8 +221,17 @@ export const syncBatch = internalAction({
             return;
           }
           try {
-            const { version, lastStatus } = await fetchPhpVersionWithFallback(tokens, site.siteId);
+            const { version, lastStatus, rocketStatus } = await fetchPhpVersionWithFallback(
+              tokens,
+              site.siteId,
+            );
             if (version === undefined && lastStatus) {
+              // Flag the record so the dashboard shows it. Records are never
+              // deleted automatically — a human decides that.
+              await ctx.runMutation(internal.phpVersions.setPhpVersion, {
+                siteId: site._id as any,
+                rocketStatus,
+              });
               errors++;
               console.error(`PHP version sync: ${site.domain} unresolved (HTTP ${lastStatus})`);
               return;
@@ -208,6 +239,7 @@ export const syncBatch = internalAction({
             await ctx.runMutation(internal.phpVersions.setPhpVersion, {
               siteId: site._id as any,
               phpVersion: version,
+              rocketStatus: "ok",
             });
             checked++;
           } catch (e) {
