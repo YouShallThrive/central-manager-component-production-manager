@@ -64,7 +64,7 @@ export function SitesPage() {
           <div className="px-4 py-12 text-center text-sm text-muted-foreground">
             {search
               ? "No sites match your search"
-              : "No sites synced yet. Click \"Sync Sites\" on the dashboard."}
+              : "No sites synced yet. Click \"Sync\" on the dashboard."}
           </div>
         ) : (
           sites.map((site) => (
