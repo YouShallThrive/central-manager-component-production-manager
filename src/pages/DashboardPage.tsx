@@ -117,6 +117,7 @@ export function DashboardPage() {
         </div>
         <span className="text-xs text-muted-foreground">
           {phpSummary.unknown > 0 && `${phpSummary.unknown} not synced · `}
+          {phpSummary.unresolved > 0 && `${phpSummary.unresolved} unreachable on Rocket.net · `}
           {phpSummary.lastCheckedAt
             ? `checked ${new Date(phpSummary.lastCheckedAt).toLocaleString()}`
             : "never checked — click Sync PHP"}
