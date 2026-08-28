@@ -78,6 +78,16 @@ export const syncBatch = internalAction({
     hasMore: v.boolean(),
   }),
   handler: async (ctx, { offset }): Promise<{ checked: number; errors: number; hasMore: boolean }> => {
+    // Rocket.net JWTs expire ~weekly; refresh credentials from Server Management
+    // before the first batch so a stale token doesn't 401 the whole sweep.
+    if (offset === 0) {
+      try {
+        await ctx.runAction(internal.credentialSync.pullFromServerManagement, {});
+      } catch (e) {
+        console.warn("Credential sync warning:", e instanceof Error ? e.message : String(e));
+      }
+    }
+
     const sites: Array<{ _id: string; siteId: number; domain: string; apiToken: string }> =
       await ctx.runQuery(internal.phpVersions.listForPhpSync, {});
     const batch = sites.slice(offset, offset + BATCH_SIZE);
