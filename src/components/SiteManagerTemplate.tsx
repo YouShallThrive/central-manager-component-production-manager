@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PhpVersionBadge } from "@/components/PhpVersionBadge";
 import { Progress } from "@/components/ui/progress";
 import {
   Select,
@@ -116,6 +117,14 @@ export interface SiteFieldAccessors<T> {
   getWpDebug: (site: T) => boolean | null | undefined;
   /** Timestamp of last WP_DEBUG check */
   getWpDebugCheckedAt: (site: T) => number | null | undefined;
+  /** PHP version — when provided, a PHP column is rendered */
+  getPhpVersion?: (site: T) => string | null | undefined;
+  /** Second PHP version to compare against (e.g. production PHP next to staging PHP) */
+  getSecondaryPhpVersion?: (site: T) => string | null | undefined;
+  /** Label for the secondary PHP version, e.g. "live" */
+  secondaryPhpLabel?: string;
+  /** Timestamp of last PHP version check */
+  getPhpCheckedAt?: (site: T) => number | null | undefined;
 }
 
 /** Standard stat values shown on every site manager */
@@ -154,6 +163,10 @@ export interface SiteManagerConfig<T> {
   accountFilter: string;
   /** Account filter handler */
   onAccountFilterChange: (v: string) => void;
+  /** Extra buttons rendered left of the Sync button */
+  headerActions?: React.ReactNode;
+  /** Panel rendered between the stats row and the filters (e.g. PHP version summary) */
+  summaryPanel?: React.ReactNode;
   /** Sync handler */
   onSync: () => void;
   /** Is sync currently running */
@@ -477,6 +490,31 @@ function buildStandardColumns<T>(
     },
   };
 
+  const phpCol: ColumnDef<T> = {
+    key: "php",
+    header: "PHP",
+    render: (site) => {
+      const primary = acc.getPhpVersion?.(site) ?? undefined;
+      const secondary = acc.getSecondaryPhpVersion?.(site) ?? undefined;
+      const checkedAt = acc.getPhpCheckedAt?.(site) ?? undefined;
+      const mismatch = !!primary && !!secondary && primary !== secondary;
+
+      return (
+        <div className="flex items-center gap-1.5">
+          <PhpVersionBadge version={primary} checkedAt={checkedAt} />
+          {mismatch && (
+            <span
+              className="text-xs text-amber-600"
+              title={`Staging is on PHP ${primary}, ${acc.secondaryPhpLabel ?? "live"} is on PHP ${secondary}`}
+            >
+              ≠ {secondary}
+            </span>
+          )}
+        </div>
+      );
+    },
+  };
+
   const pluginsCol: ColumnDef<T> = {
     key: "plugins",
     header: "Plugins",
@@ -527,6 +565,7 @@ function buildStandardColumns<T>(
   return [
     domainCol,
     ...(extraColumns ?? []),
+    ...(acc.getPhpVersion ? [phpCol] : []),
     pluginsCol,
     guardCol,
     muPluginsCol,
@@ -552,6 +591,8 @@ export default function SiteManagerTemplate<T>(props: SiteManagerConfig<T>) {
     accountFilter,
     onAccountFilterChange,
     onSync,
+    headerActions,
+    summaryPanel,
     isSyncing,
     syncProgress,
     onSiteClick,
@@ -591,6 +632,8 @@ export default function SiteManagerTemplate<T>(props: SiteManagerConfig<T>) {
           <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
         </div>
+        <div className="flex items-center gap-2">
+        {headerActions}
         <Button
           onClick={onSync}
           disabled={isSyncing}
@@ -604,6 +647,7 @@ export default function SiteManagerTemplate<T>(props: SiteManagerConfig<T>) {
           )}
           {isSyncing ? "Syncing..." : "Sync from Rocket.net"}
         </Button>
+        </div>
       </div>
 
       {/* Sync Progress Bar (reactive) */}
@@ -658,6 +702,8 @@ export default function SiteManagerTemplate<T>(props: SiteManagerConfig<T>) {
           ))}
         </div>
       )}
+
+      {summaryPanel}
 
       {/* Filters */}
       <div className="flex items-center gap-3">

@@ -30,6 +30,7 @@ const schema = defineSchema({
     ),
     wpVersion: v.optional(v.string()),
     phpVersion: v.optional(v.string()),
+    phpCheckedAt: v.optional(v.number()),
     // Plugin tracking
     pluginCount: v.optional(v.number()),
     outdatedCount: v.optional(v.number()),

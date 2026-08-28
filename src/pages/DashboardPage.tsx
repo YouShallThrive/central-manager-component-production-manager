@@ -4,6 +4,10 @@ import { useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import SiteManagerTemplate from "@/components/SiteManagerTemplate";
+import { PhpVersionBadge } from "@/components/PhpVersionBadge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Cpu, AlertTriangle, Loader2 } from "lucide-react";
 import type { ColumnDef, SiteFieldAccessors, SiteManagerStats, ExtraFilter } from "@/components/SiteManagerTemplate";
 
 type SiteDoc = {
@@ -39,6 +43,8 @@ const fieldAccessors: SiteFieldAccessors<SiteDoc> = {
   getStatuscakeUptime: (site) => site.statuscakeUptime,
   getWpDebug: (site) => site.wpDebug ?? null,
   getWpDebugCheckedAt: (site) => site.wpDebugCheckedAt ?? null,
+  getPhpVersion: (site) => site.phpVersion,
+  getPhpCheckedAt: (site) => site.phpCheckedAt,
 };
 
 /* ── Extra column: Account (production-specific) ── */
@@ -72,6 +78,61 @@ export function DashboardPage() {
   });
   const triggerSync = useAction(api.sync.triggerFullSync);
   const [syncing, setSyncing] = useState(false);
+  const phpSummary = useQuery(api.phpVersions.summary);
+  const syncPhpVersions = useAction(api.phpVersions.syncAll);
+  const [phpSyncing, setPhpSyncing] = useState(false);
+
+  const handlePhpSync = useCallback(async () => {
+    setPhpSyncing(true);
+    try {
+      const res = await syncPhpVersions({});
+      toast.info(`Checking PHP versions on ${res.sites} sites — running in the background.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "PHP version sync failed");
+    } finally {
+      setPhpSyncing(false);
+    }
+  }, [syncPhpVersions]);
+
+  const phpHeaderAction = (
+    <Button onClick={handlePhpSync} disabled={phpSyncing} variant="outline" className="gap-2">
+      {phpSyncing ? <Loader2 className="size-4 animate-spin" /> : <Cpu className="size-4" />}
+      Sync PHP
+    </Button>
+  );
+
+  const phpPanel = phpSummary && phpSummary.total > 0 ? (
+    <div className="rounded-lg border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Cpu className="size-4 text-muted-foreground" />
+          <span className="text-sm font-medium">PHP versions</span>
+          {phpSummary.critical > 0 && (
+            <Badge variant="outline" className="text-xs border-red-300 text-red-700 bg-red-50 dark:bg-red-950/30 gap-1">
+              <AlertTriangle className="size-3" />
+              {phpSummary.critical} end-of-life
+            </Badge>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {phpSummary.unknown > 0 && `${phpSummary.unknown} not synced · `}
+          {phpSummary.lastCheckedAt
+            ? `checked ${new Date(phpSummary.lastCheckedAt).toLocaleString()}`
+            : "never checked — click Sync PHP"}
+        </span>
+      </div>
+      {phpSummary.byVersion.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {phpSummary.byVersion.map((row) => (
+            <div key={row.version} className="flex items-center gap-1.5">
+              <PhpVersionBadge version={row.version} />
+              <span className="text-xs tabular-nums text-muted-foreground">×{row.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null;
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
@@ -145,6 +206,8 @@ export function DashboardPage() {
       accountFilter={accountFilter}
       onAccountFilterChange={setAccountFilter}
       onSync={handleSync}
+      headerActions={phpHeaderAction}
+      summaryPanel={phpPanel}
       isSyncing={syncing}
       onSiteClick={(site) => navigate(`/site/${site._id}`)}
       getSiteKey={(site) => site._id}

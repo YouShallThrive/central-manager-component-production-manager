@@ -1,5 +1,6 @@
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { PhpVersionBadge } from "@/components/PhpVersionBadge";
 import { useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -141,9 +142,7 @@ export function SiteDetailPage() {
           {site.wpVersion && (
             <span className="text-sm text-muted-foreground">WP {site.wpVersion}</span>
           )}
-          {site.phpVersion && (
-            <span className="text-sm text-muted-foreground">PHP {site.phpVersion}</span>
-          )}
+          <PhpVersionBadge version={site.phpVersion} checkedAt={site.phpCheckedAt} />
           {site.lastSyncedAt && (
             <span className="text-sm text-muted-foreground">
               Synced {new Date(site.lastSyncedAt).toLocaleDateString()}
