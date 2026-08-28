@@ -227,6 +227,62 @@ http.route({
   }),
 });
 
+// ── PHP maintenance endpoints ───────────────────────────────
+// POST /api/admin/orphan-audit  { adminKey, purge?: boolean }
+// POST /api/admin/php-lock-check { adminKey }
+
+http.route({
+  path: "/api/admin/orphan-audit",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      if (!body.adminKey || body.adminKey !== secret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 403,
+          headers: corsHeaders(),
+        });
+      }
+      const result = await ctx.runAction(internal.orphanSites.audit, {
+        purge: body.purge === true,
+      });
+      return new Response(JSON.stringify({ status: "ok", ...result }), {
+        status: 200,
+        headers: corsHeaders(),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(JSON.stringify({ error: msg }), { status: 500, headers: corsHeaders() });
+    }
+  }),
+});
+
+http.route({
+  path: "/api/admin/php-lock-check",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const body = await request.json();
+      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      if (!body.adminKey || body.adminKey !== secret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 403,
+          headers: corsHeaders(),
+        });
+      }
+      const result = await ctx.runQuery(internal.phpAudit.lockCrossCheck, {});
+      return new Response(JSON.stringify({ status: "ok", ...result }), {
+        status: 200,
+        headers: corsHeaders(),
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(JSON.stringify({ error: msg }), { status: 500, headers: corsHeaders() });
+    }
+  }),
+});
+
 function corsHeaders() {
   return {
     "Content-Type": "application/json",
