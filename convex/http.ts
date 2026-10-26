@@ -18,7 +18,7 @@ http.route({
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const authHeader = request.headers.get("Authorization");
-    const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+    const secret = process.env.SSO_SHARED_SECRET;
     if (!secret || !authHeader || authHeader !== `Bearer ${secret}`) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 403,
@@ -63,7 +63,7 @@ http.route({
       const body = await request.json();
       const { serverManagementUrl, ssoSharedSecret, adminKey } = body;
 
-      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      const secret = process.env.SSO_SHARED_SECRET;
       if (!adminKey || adminKey !== secret) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 403,
@@ -111,7 +111,7 @@ http.route({
       const body = await request.json();
       const { adminKey, label, apiToken } = body;
 
-      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      const secret = process.env.SSO_SHARED_SECRET;
       if (!adminKey || adminKey !== secret) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 403,
@@ -157,7 +157,7 @@ http.route({
       const body = await request.json();
       const { adminKey } = body;
 
-      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      const secret = process.env.SSO_SHARED_SECRET;
       if (!adminKey || adminKey !== secret) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 403,
@@ -237,7 +237,7 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     try {
       const body = await request.json();
-      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      const secret = process.env.SSO_SHARED_SECRET;
       if (!body.adminKey || body.adminKey !== secret) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 403,
@@ -262,7 +262,7 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     try {
       const body = await request.json();
-      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      const secret = process.env.SSO_SHARED_SECRET;
       if (!body.adminKey || body.adminKey !== secret) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 403,
@@ -288,7 +288,7 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     try {
       const body = await request.json();
-      const secret = process.env.SSO_SHARED_SECRET || "66mTA4FYT1TTYfuD6FC7eDHLN15vZC7T3L6DLz3tqbk";
+      const secret = process.env.SSO_SHARED_SECRET;
       if (!body.adminKey || body.adminKey !== secret) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 403,
